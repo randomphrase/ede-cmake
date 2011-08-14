@@ -1,39 +1,7 @@
 (require 'ede-cpp-root)
 
-(defvar project-root-build-directories
-  '(("None" . "build")
-    ("Debug" . "build.dbg")
-    ("Release" . "build.rel"))
-  "Alist of build directories in the project root"
- )
-
-(defun project-root-build-locator (config root-dir)
-  "Locates a build directory in the project root, uses
-project-root-build-directories to look up the name. It may be a
-symlink elsewhere, in whch case we resolve the symlink"
-  (let* ((build-dir-name (cdr (assoc config project-root-build-directories)))
-         (build-dir (concat root-dir build-dir-name)))
-    (if (and (file-exists-p build-dir) (file-directory-p build-dir))
-        (if (file-symlink-p build-dir)
-            (file-truename build-dir)
-          (if build-dir-name
-              build-dir
-            nil))
-      nil)
-    ))
-
-(defun ede-cmake-load (dir)
-  "Load a cmake-cpp-project from DIR."
-  (ede-cmake-cpp-project
-   "NAME"
-   :file (expand-file-name "CMakeLists.txt" dir)
-   :locate-build-directory 'project-root-build-locator
-   :cmake-build-arguments "-j4"
-   ))
-
 (defclass ede-cmake-cpp-project (ede-cpp-root-project)
-  (
-   (file :type string
+  ((file :type string
 	 :initarg :file
          :initform "CMakeLists.txt"
 	 :documentation "File name where this project is stored.")
@@ -55,10 +23,12 @@ the project root directory")
     :label "Configuration Options"
     :group (settings)
     :documentation "List of available configuration types.
-Individual target/project types can form associations between a configuration,
-and target specific elements such as build variables.")
+Individual target/project types can form associations between a
+configuration, and target specific elements such as build
+variables.")
    (configuration-default
     :initarg :configuration-default
+    ; no default, will be selected from first valid build directory
     :initform "None"
     :custom string
     :label "Current Configuration"
@@ -77,31 +47,42 @@ and target specific elements such as build variables.")
    )
   "EDE CMake C/C++ project.")
 
+(defun cmake-build-directory-valid (dir)
+  "returns dir if a valid build directory, nil otherwise. Also resolves symlinks."
+    (if (and (file-exists-p dir) (file-directory-p dir))
+        (if (file-symlink-p dir)
+            (file-truename dir)
+          dir)
+      nil))
+
 (defmethod initialize-instance ((this ede-cmake-cpp-project)
 				&rest fields)
-  ""
   ;; Add ourselves to the master list
   (call-next-method)
 
-  ;; Call the locate build directory function to populate the build-directories slot
+  ;; Call the locate build directory function to populate the build-directories slot. Also validate
+  ;; the results
   (when (and (not (slot-boundp this 'build-directories))
              (slot-boundp this 'locate-build-directory))
     (let ((locatefn (oref this locate-build-directory))
           (dir-root (oref this directory)))
       (oset this build-directories
             (mapcar (lambda (c)
-                      (let ((build-dir (funcall locatefn c dir-root)))
-                        (cons c build-dir)))
+                      (let* ((build-dir (funcall locatefn c dir-root))
+                             (build-dir-valid (cmake-build-directory-valid build-dir)))
+                        (cons c build-dir-valid)))
                     (oref this configurations)))
       ))
 
-  ;; Set the configuration-default
-  (unless (slot-boundp this 'configuration-default)
+  ;; Does the configuration-default have a valid build directory?
+  (when (not (cdr (assoc (oref this configuration-default) (oref this build-directories))))
+    ;; No, set the first configuration that has a build directory
     (oset this configuration-default
-          ;; Set the first configuration that has a build directory
-          (car (delq (lambda (c) (if (cdr c) (car c) nil))))
+          (car (delq nil (mapcar (lambda (c) (if (cdr c) (car c) nil))
+                                 (oref this build-directories))))
           ))
   )
+  
 
 (defmethod cmake-build-directory ((this ede-cmake-cpp-project))
   "Returns the current build directory. Raises an error if the build directory is not valid"
@@ -124,25 +105,55 @@ and target specific elements such as build variables.")
       (compile cmake-command)
     ))
 
-(defmethod project-compile-project ((proj ede-cmake-cpp-project))
-  "Compile the project with cmake"
-  (let ((build-dir (file-relative-name (cmake-build-directory proj)))
+(defmethod cmake-build ((this ede-cmake-cpp-project) &optional target)
+  (let ((build-dir (file-relative-name (cmake-build-directory this)))
+        (target-arg (if target (concat " --target " (oref target name)) ""))
         (additional-args (if (slot-boundp this 'cmake-build-arguments)
                              (concat " -- " (oref this cmake-build-arguments) ""))))
-    (compile (concat "cmake --build " build-dir " --config " (oref proj configuration-default) additional-args))
+    (compile (concat "cmake --build " build-dir target-arg
+                     " --config " (oref this configuration-default)
+                     additional-args))
     ))
+
+(defmethod project-compile-project ((this ede-cmake-cpp-project))
+  "Compile the project with cmake"
+  (cmake-build this))
 
 (defmethod project-compile-target ((this ede-cpp-root-target))
   "Compile the project with cmake"
-  (project-compile-project (ede-current-project) command))
+  (cmake-build ede-object-project this))
 
 
-
+;; Example only
 (add-to-list 'ede-project-class-files
              (ede-project-autoload "cmake" :name "CMAKE ROOT" 
                                    :file 'ede-cmake
                                    :proj-file 'ede-cpp-root-project-file-for-dir
                                    :proj-root 'ede-cpp-root-project-root
                                    :class-sym 'ede-cmake-cpp-project))
+
+;; Example only
+(defvar project-root-build-directories
+  '(("None" . "build")
+    ("Debug" . "build.dbg")
+    ("Release" . "build.rel"))
+  "Alist of build directories in the project root"
+ )
+
+;; Example only
+(defun project-root-build-locator (config root-dir)
+  "Locates a build directory in the project root, uses
+project-root-build-directories to look up the name."
+  (cdr (assoc config project-root-build-directories)))
+
+;; Example only
+(defun ede-cmake-load (dir)
+  "Load a cmake-cpp-project from DIR."
+  (ede-cmake-cpp-project
+   "NAME"
+   :file (expand-file-name "CMakeLists.txt" dir)
+   :locate-build-directory 'project-root-build-locator
+   :cmake-build-arguments "-j4"
+   ))
 
 (provide 'ede-cmake)

@@ -41,7 +41,7 @@ variables.")
    (menu :allocation :class
 	 :initform
 	 (
-	  [ "Run CMake In Build Directory" cmake-setup-build-directory ede-object ]
+	  [ "Run CMake In Build Directory" cmake-setup-build-directory ede-object-project ]
           )
          :documentation "Menu items for this project")
    )
@@ -49,7 +49,7 @@ variables.")
 
 (defun cmake-build-directory-valid (dir)
   "returns dir if a valid build directory, nil otherwise. Also resolves symlinks."
-    (if (and (file-exists-p dir) (file-directory-p dir))
+    (if (and dir (file-exists-p dir) (file-directory-p dir))
         (if (file-symlink-p dir)
             (file-truename dir)
           dir)
@@ -124,36 +124,36 @@ variables.")
   (cmake-build ede-object-project this))
 
 
-;; Example only
-(add-to-list 'ede-project-class-files
-             (ede-project-autoload "cmake" :name "CMAKE ROOT" 
-                                   :file 'ede-cmake
-                                   :proj-file 'ede-cpp-root-project-file-for-dir
-                                   :proj-root 'ede-cpp-root-project-root
-                                   :class-sym 'ede-cmake-cpp-project))
+;; ;; Example only
+;; (add-to-list 'ede-project-class-files
+;;              (ede-project-autoload "cmake" :name "CMAKE ROOT" 
+;;                                    :file 'ede-cmake
+;;                                    :proj-file 'ede-cpp-root-project-file-for-dir
+;;                                    :proj-root 'ede-cpp-root-project-root
+;;                                    :class-sym 'ede-cmake-cpp-project))
 
-;; Example only
-(defvar project-root-build-directories
-  '(("None" . "build")
-    ("Debug" . "build.dbg")
-    ("Release" . "build.rel"))
-  "Alist of build directories in the project root"
- )
+;; ;; Example only
+;; (defvar project-root-build-directories
+;;   '(("None" . "build")
+;;     ("Debug" . "build.dbg")
+;;     ("Release" . "build.rel"))
+;;   "Alist of build directories in the project root"
+;;  )
 
-;; Example only
-(defun project-root-build-locator (config root-dir)
-  "Locates a build directory in the project root, uses
-project-root-build-directories to look up the name."
-  (cdr (assoc config project-root-build-directories)))
+;; ;; Example only
+;; (defun project-root-build-locator (config root-dir)
+;;   "Locates a build directory in the project root, uses
+;; project-root-build-directories to look up the name."
+;;   (cdr (assoc config project-root-build-directories)))
 
-;; Example only
-(defun ede-cmake-load (dir)
-  "Load a cmake-cpp-project from DIR."
-  (ede-cmake-cpp-project
-   "NAME"
-   :file (expand-file-name "CMakeLists.txt" dir)
-   :locate-build-directory 'project-root-build-locator
-   :cmake-build-arguments "-j4"
-   ))
+;; ;; Example only
+;; (defun ede-cmake-load (dir)
+;;   "Load a cmake-cpp-project from DIR."
+;;   (ede-cmake-cpp-project
+;;    "NAME"
+;;    :file (expand-file-name "CMakeLists.txt" dir)
+;;    :locate-build-directory 'project-root-build-locator
+;;    :cmake-build-arguments "-j4"
+;;    ))
 
 (provide 'ede-cmake)

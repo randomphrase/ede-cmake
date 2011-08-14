@@ -1,3 +1,7 @@
+;; ede-cmake.el --- EDE Project class for CMake-based C/C++ projects
+
+;; Author: Alastair Rankine <alastair@girtby.net>
+
 (require 'ede-cpp-root)
 
 (defclass ede-cmake-cpp-project (ede-cpp-root-project)
@@ -48,7 +52,7 @@ variables.")
   "EDE CMake C/C++ project.")
 
 (defun cmake-build-directory-valid (dir)
-  "returns dir if a valid build directory, nil otherwise. Also resolves symlinks."
+  "Returns DIR if a valid build directory, nil otherwise. Also resolves symlinks."
     (if (and dir (file-exists-p dir) (file-directory-p dir))
         (if (file-symlink-p dir)
             (file-truename dir)
@@ -78,6 +82,7 @@ variables.")
   (when (not (cdr (assoc (oref this configuration-default) (oref this build-directories))))
     ;; No, set the first configuration that has a build directory
     (oset this configuration-default
+          ;; TODO: what if none found?
           (car (delq nil (mapcar (lambda (c) (if (cdr c) (car c) nil))
                                  (oref this build-directories))))
           ))

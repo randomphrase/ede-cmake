@@ -114,10 +114,11 @@ variables.")
   (let ((build-dir (file-relative-name (cmake-build-directory this)))
         (target-arg (if target (concat " --target " (oref target name)) ""))
         (additional-args (if (slot-boundp this 'cmake-build-arguments)
-                             (concat " -- " (oref this cmake-build-arguments) ""))))
-    (compile (concat "cmake --build " build-dir target-arg
-                     " --config " (oref this configuration-default)
-                     additional-args))
+                             (concat " -- " (oref this cmake-build-arguments) "")))
+        (cmake-command (concat "cmake --build " build-dir target-arg
+                               " --config " (oref this configuration-default)
+                               additional-args)))
+    (compile cmake-command)
     ))
 
 (defmethod project-compile-project ((this ede-cmake-cpp-project))

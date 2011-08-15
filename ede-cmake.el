@@ -110,12 +110,12 @@ variables.")
       (compile cmake-command)
     ))
 
-(defmethod cmake-build ((this ede-cmake-cpp-project) &optional target)
+(defmethod cmake-build ((this ede-cmake-cpp-project) &optional target-name)
   (let* ((build-dir (cmake-build-directory this))
-        (target-arg (if target (concat " --target " (oref target name)) ""))
-        (additional-args (if (slot-boundp this 'cmake-build-arguments)
+         (target-arg (if target-name (concat " --target " target-name) ""))
+         (additional-args (if (slot-boundp this 'cmake-build-arguments)
                              (concat " -- " (oref this cmake-build-arguments) "")))
-        (cmake-command (concat "cmake --build " build-dir target-arg
+         (cmake-command (concat "cmake --build " build-dir target-arg
                                " --config " (oref this configuration-default)
                                additional-args)))
     (compile cmake-command)
@@ -127,8 +127,12 @@ variables.")
 
 (defmethod project-compile-target ((this ede-cpp-root-target))
   "Compile the project with cmake"
-  (cmake-build ede-object-project this))
+  (cmake-build ede-object-project (oref this name)))
 
+(defun cmake-project-build-custom-target (target)
+  "Prompt for a custom target and build it in the current project"
+  (interactive "MTarget: ")
+  (cmake-build (ede-current-project) target))
 
 ;; ;; Example only
 ;; (add-to-list 'ede-project-class-files

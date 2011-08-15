@@ -51,12 +51,12 @@ variables.")
    )
   "EDE CMake C/C++ project.")
 
-(defun cmake-build-directory-valid (dir)
+(defun cmake-build-directory-valid-p (dir)
   "Returns DIR if a valid build directory, nil otherwise. Also resolves symlinks."
     (if (and dir (file-exists-p dir) (file-directory-p dir))
         (if (file-symlink-p dir)
             (file-truename dir)
-          dir)
+          t)
       nil))
 
 (defmethod initialize-instance ((this ede-cmake-cpp-project)
@@ -64,26 +64,23 @@ variables.")
   ;; Add ourselves to the master list
   (call-next-method)
 
-  ;; Call the locate build directory function to populate the build-directories slot. Also validate
-  ;; the results
+  ;; Call the locate build directory function to populate the build-directories slot.
   (when (and (not (slot-boundp this 'build-directories))
              (slot-boundp this 'locate-build-directory))
     (let ((locatefn (oref this locate-build-directory))
           (dir-root (oref this directory)))
       (oset this build-directories
-            (mapcar (lambda (c)
-                      (let* ((build-dir (funcall locatefn c dir-root))
-                             (build-dir-valid (cmake-build-directory-valid build-dir)))
-                        (cons c build-dir-valid)))
+            (mapcar (lambda (c) (cons c (funcall locatefn c dir-root)))
                     (oref this configurations)))
       ))
 
   ;; Does the configuration-default have a valid build directory?
-  (when (not (cdr (assoc (oref this configuration-default) (oref this build-directories))))
+  (unless (cmake-build-directory-valid-p (cdr (assoc (oref this configuration-default)
+                                                     (oref this build-directories))))
     ;; No, set the first configuration that has a build directory
     (oset this configuration-default
           ;; TODO: what if none found?
-          (car (delq nil (mapcar (lambda (c) (if (cdr c) (car c) nil))
+          (car (delq nil (mapcar (lambda (c) (if (cmake-build-directory-valid-p (cdr c)) (car c) nil))
                                  (oref this build-directories))))
           ))
   )

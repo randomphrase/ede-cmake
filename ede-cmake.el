@@ -111,7 +111,7 @@ variables.")
     ))
 
 (defmethod cmake-build ((this ede-cmake-cpp-project) &optional target)
-  (let ((build-dir (file-relative-name (cmake-build-directory this)))
+  (let* ((build-dir (cmake-build-directory this))
         (target-arg (if target (concat " --target " (oref target name)) ""))
         (additional-args (if (slot-boundp this 'cmake-build-arguments)
                              (concat " -- " (oref this cmake-build-arguments) "")))

@@ -45,7 +45,7 @@ variables.")
    (menu :allocation :class
 	 :initform
 	 (
-	  [ "Run CMake In Build Directory" cmake-setup-build-directory ede-object-project ]
+	  [ "Configure CMake Build Directory" cmake-configure-current-build-directory ]
           )
          :documentation "Menu items for this project")
    )
@@ -86,9 +86,9 @@ variables.")
   )
   
 
-(defmethod cmake-build-directory ((this ede-cmake-cpp-project))
+(defmethod cmake-build-directory ((this ede-cmake-cpp-project) &optional config)
   "Returns the current build directory. Raises an error if the build directory is not valid"
-  (let* ((config (oref this configuration-default))
+  (let* ((config (or config (oref this configuration-default)))
          (build-dir (cdr (assoc config (oref this build-directories)))))
     (unless build-dir
       (error "Build directory not set"))
@@ -97,15 +97,21 @@ variables.")
     build-dir
     ))
 
-(defmethod cmake-setup-build-directory ((this ede-cmake-cpp-project))
+(defmethod cmake-configure-build-directory ((this ede-cmake-cpp-project) &optional config)
   "Set up build directory for configuration type CONFIG, or configuration-default if not set"
-    (let* ((default-directory (cmake-build-directory this))
+    (let* ((config (or config (oref this configuration-default)))
+           (default-directory (cmake-build-directory this config))
            (cmake-define-build-type (if (string= config "None") ""
                                       (concat "-DCMAKE_BUILD_TYPE=" config)))
            (cmake-command (concat "cmake " cmake-define-build-type " "
                                   (oref this directory) )))
       (compile cmake-command)
     ))
+
+(defun cmake-configure-current-build-directory ()
+  "Configure the build directory for the current build type"
+  (interactive)
+  (cmake-configure-build-directory (ede-current-project)))
 
 (defmethod cmake-build ((this ede-cmake-cpp-project) &optional target-name)
   (let* ((build-dir (cmake-build-directory this))

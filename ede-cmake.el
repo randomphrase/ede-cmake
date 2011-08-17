@@ -100,7 +100,7 @@ variables.")
 (defmethod cmake-configure-build-directory ((this ede-cmake-cpp-project) &optional config)
   "Set up build directory for configuration type CONFIG, or configuration-default if not set"
     (let* ((config (or config (oref this configuration-default)))
-           (default-directory (cmake-build-directory this config))
+           (default-directory (file-name-as-directory (cmake-build-directory this config)))
            (cmake-define-build-type (if (string= config "None") ""
                                       (concat "-DCMAKE_BUILD_TYPE=" config)))
            (cmake-command (concat "cmake " cmake-define-build-type " "

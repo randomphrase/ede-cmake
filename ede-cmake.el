@@ -85,6 +85,11 @@ variables.")
           ))
   )
   
+(defmethod ede-menu-items-build ((this ede-cmake-cpp-project) &optional current)
+  "Override to add a custom target menu item"
+  (append (call-next-method)
+          (list
+           [ "Build Custom Target..." cmake-project-build-custom-target ])))
 
 (defmethod cmake-build-directory ((this ede-cmake-cpp-project) &optional config)
   "Returns the current build directory. Raises an error if the build directory is not valid"

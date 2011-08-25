@@ -5,13 +5,13 @@
 (require 'ede-cpp-project)
 (require 'ede-base)
 
-(defclass ede-cmake-cpp-target (ede-target ede-cpp-target)
+(defclass ede-cmake-cpp-target (ede-cpp-target ede-target)
   (
    (parent :initarg :parent)
    )
 )
 
-(defclass ede-cmake-cpp-project (ede-project ede-cpp-project)
+(defclass ede-cmake-cpp-project (ede-cpp-project ede-project)
   ((file :type string
 	 :initarg :file
          :initform "CMakeLists.txt"

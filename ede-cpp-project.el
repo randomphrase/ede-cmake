@@ -6,7 +6,8 @@
 (require 'ede)
 
 (defclass ede-cpp-target ()
-)
+  ()
+  )
 
 (defclass ede-cpp-project ()
   (

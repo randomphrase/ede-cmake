@@ -6,7 +6,6 @@
 (require 'ede)
 
 (defclass ede-cpp-target ()
-  ()
 )
 
 (defclass ede-cpp-project ()
@@ -58,20 +57,6 @@ See `semantic-lex-c-preprocessor-symbol-map' for more on how this works.")
 			:type string
 			:documentation
 			"Regexp used to identify C/C++ header files.")
-   (locate-fcn :initarg :locate-fcn
-	       :initform nil
-	       :type (or null function)
-	       :documentation
-	       "The locate function can be used in place of
-`ede-expand-filename' so you can quickly customize your custom target
-to use specialized local routines instead of the EDE routines.
-The function symbol must take two arguments:
-  NAME - The name of the file to find.
-  DIR - The directory root for this cpp-root project.
-
-It should return the fully qualified file name passed in from NAME.  If that file does not
-exist, it should return nil."
-	       )
    )
   "Helper class for EDE projects which use C++"
 )

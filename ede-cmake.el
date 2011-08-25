@@ -6,7 +6,9 @@
 (require 'ede-base)
 
 (defclass ede-cmake-cpp-target (ede-target ede-cpp-target)
-  ()
+  (
+   (parent :initarg :parent)
+   )
 )
 
 (defclass ede-cmake-cpp-project (ede-project ede-cpp-project)
@@ -49,6 +51,23 @@ variables.")
     :initarg :build-tool-additional-parameters
     :type string
     :documentation "Additional parameters to build tool")
+
+   ;; Stolen from ede-cpp-root
+   (locate-fcn
+    :initarg :locate-fcn
+    :initform nil
+    :type (or null function)
+    :documentation
+    "The locate function can be used in place of
+`ede-expand-filename' so you can quickly customize your custom target
+to use specialized local routines instead of the EDE routines.
+The function symbol must take two arguments:
+  NAME - The name of the file to find.
+  DIR - The directory root for this cpp-root project.
+
+It should return the fully qualified file name passed in from NAME.  If that file does not
+exist, it should return nil.")
+
    (menu :allocation :class
 	 :initform
 	 (
@@ -149,48 +168,13 @@ variables.")
           (list
            [ "Build Custom Target..." cmake-project-build-custom-target ])))
 
-(defmethod ede-find-subproject-for-directory ((proj ede-cmake-cpp-project)
-					      dir)
-  "Return PROJ, for handling all subdirs below DIR."
-  proj)
 
-(defmethod ede-expand-filename-impl ((proj ede-cmake-cpp-project) name)
-  "Within this project PROJ, find the file NAME.
-This knows details about or source tree."
-  ;; The slow part of the original is looping over subprojects.
-  ;; This version has no subprojects, so this will handle some
-  ;; basic cases.
-  (let ((ans (call-next-method)))
-    (unless ans
-      (let* ((lf (oref proj locate-fcn))
-	     (dir (file-name-directory (oref proj file))))
-	(if lf
-	    (setq ans (funcall lf name dir))
-	  (if (ede-cpp-header-file-p proj name)
-	      ;; Else, use our little hack.
-	      (let ((ip (oref proj include-path))
-		    (tmp nil))
-		(while ip
-		  ;; Translate
-		  (setq tmp (ede-cpp-translate-file proj (car ip)))
-		  ;; Test this name.
-		  (setq tmp (expand-file-name name tmp))
-		  (if (file-exists-p tmp)
-		      (setq ans tmp))
-		  (setq ip (cdr ip)) ))
-	    ;; Else, do the usual.
-	    (setq ans (call-next-method)))
-	  )))
-    ;; TODO - does this call-next-method happen twice.  Is that bad??  Why is it here?
-    (or ans (call-next-method))))
-
-
-(defmethod ede-find-target ((this ede-cmake-cpp-project) buffer)
+(defmethod ede-find-target ((proj ede-cmake-cpp-project) buffer)
   "Find an EDE target in PROJ for BUFFER.
 If one doesn't exist, create a new one for this directory."
   (let* ((targets (oref proj targets))
 	 (dirname (directory-file-name (file-name-directory (buffer-file-name buffer))))
-         (path (file-relative-name dirname (oref this directory)))
+         (path (file-relative-name dirname (oref proj directory)))
 	 (ans (object-assoc path :path targets))
 	 )
     (when (not ans)
@@ -198,7 +182,8 @@ If one doesn't exist, create a new one for this directory."
       (setq ans (ede-cmake-cpp-target path
                  :name (file-name-nondirectory dirname)
 		 :path path
-		 :source nil))
+		 :source nil
+                 :parent proj))
       (object-add-to-list proj :targets ans)
       )
     ans))
@@ -266,6 +251,64 @@ If one doesn't exist, create a new one for this directory."
 (defmethod tool-run-target ((tool cmake-build-tool) target)
   "Run the specified target"
   (error "tool-run-target not supported by %s" (object-name ot)))
+
+
+
+(defmethod ede-system-include-path ((this ede-cmake-cpp-target))
+  "Get the system include path used by target THIS."
+  (ede-system-include-path (oref this parent)))
+  
+(defmethod ede-preprocessor-map ((this ede-cmake-cpp-target))
+  "Get the pre-processor map for project THIS."
+  (ede-preprocessor-map  (oref this parent)))
+
+
+;; FIXME: these methods stolen from ede-cpp-root
+
+(defmethod ede-project-root ((this ede-cmake-cpp-project))
+  "Return my root."
+  this)
+
+(defmethod ede-project-root-directory ((this ede-cmake-cpp-project))
+  "Return my root."
+  (file-name-directory (oref this file)))
+
+(defmethod ede-find-subproject-for-directory ((proj ede-cmake-cpp-project)
+					      dir)
+  "Return PROJ, for handling all subdirs below DIR."
+  proj)
+
+(defmethod ede-expand-filename-impl ((proj ede-cmake-cpp-project) name)
+  "Within this project PROJ, find the file NAME.
+This knows details about or source tree."
+  ;; The slow part of the original is looping over subprojects.
+  ;; This version has no subprojects, so this will handle some
+  ;; basic cases.
+  (let ((ans (call-next-method)))
+    (unless ans
+      (let* ((lf (oref proj locate-fcn))
+	     (dir (file-name-directory (oref proj file)))
+             (lfans (funcall lf name dir)))
+	(if lfans
+	    (setq ans lfans)
+	  (if (ede-cpp-header-file-p proj name)
+	      ;; Else, use our little hack.
+	      (let ((ip (oref proj include-path))
+		    (tmp nil))
+		(while ip
+		  ;; Translate
+		  (setq tmp (ede-cpp-translate-file proj (car ip)))
+		  ;; Test this name.
+		  (setq tmp (expand-file-name name tmp))
+		  (if (file-exists-p tmp)
+		      (setq ans tmp))
+		  (setq ip (cdr ip)) ))
+	    ;; Else, do the usual.
+	    (setq ans (call-next-method)))
+	  )))
+    ;; TODO - does this call-next-method happen twice.  Is that bad??  Why is it here?
+    (or ans (call-next-method))))
+
 
 ;; ;; Example only
 ;; (add-to-list 'ede-project-class-files

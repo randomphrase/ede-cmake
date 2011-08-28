@@ -11,17 +11,13 @@
    )
 )
 
-(defclass ede-cmake-project-base (ede-project)
-  ((file :type string
-	 :initarg :file
-         :initform "CMakeLists.txt"
-	 :documentation "File name where this project is stored.")
-   )
-  "Common base class for ede-cmake-cpp-project and ede-cmake-subproject"
-  :abstract t)
-
-(defclass ede-cmake-cpp-project (ede-cmake-project-base ede-cpp-project)
-  ((locate-build-directory
+(defclass ede-cmake-cpp-project (ede-cpp-project ede-project)
+  ((file
+    :type string
+    :initarg :file
+    :initform "CMakeLists.txt"
+    :documentation "File name where this project is stored.")
+   (locate-build-directory
     :initarg :locate-build-directory
     :type function
     :documentation "Function to call to find the build directory
@@ -82,26 +78,14 @@ exist, it should return nil.")
    )
   "EDE CMake C/C++ project.")
 
-(defclass ede-cmake-subproject (ede-cmake-project-base)
-  ((parent
-    :type (or ede-cmake-project-base null)
-    :initarg :parent
-    :documentation "Parent project")
-   )
-  "EDE CMake subproject"
-  )
-
 (defclass cmake-build-tool ()
-  ((name
-    :type string
-    :initarg :name
-    :documentation "Name of build tool")
-   (file-generator
+  ((file-generator
     :type string
     :initarg :file-generator
     :documentation "Which CMake generator to use for build files"))
    (additional-parameters
     :initarg :additional-parameters
+    :initform ""
     :type string
     :documentation "Additional parameters to build tool")
 )
@@ -119,6 +103,19 @@ exist, it should return nil.")
         (path (oref target path)))
     (concat (file-name-as-directory builddir) (file-name-as-directory path))))
 
+(defmethod cmake-make-build-tool-invoke ((this cmake-make-build-tool) dir targetname)
+  "Invokes make in DIR for TARGETNAME"
+  (let ((default-directory dir)
+        (cmd (format "make %s %s" (or (oref this additional-parameters) "") targetname)))
+    (compile cmd)))
+
+(defmethod cmake-build-tool-compile ((this cmake-make-build-tool) build-dir targetname file)
+  "Compiles FILE in BUILD-DIR in TARGET"
+  (let ((dir (concat (file-name-as-directory build-dir) targetname))
+        (doto (concat file ".o")))
+    (cmake-make-build-tool-invoke this dir doto)
+    ))
+
 (defun cmake-build-directory-valid-p (dir)
   "Returns DIR if a valid build directory, nil otherwise. Also resolves symlinks."
     (if (and dir (file-exists-p dir) (file-directory-p dir))
@@ -127,8 +124,8 @@ exist, it should return nil.")
           t)
       nil))
 
-(defmethod initialize-instance ((this ede-cmake-project-base)
-                                &rest fields)
+(defmethod initialize-instance ((this ede-cmake-cpp-project)
+				&rest fields)
   (call-next-method)
 
   (let ((f (expand-file-name (oref this :file))))
@@ -139,11 +136,10 @@ exist, it should return nil.")
     )
   (unless (slot-boundp this 'targets)
     (oset this :targets nil))
-)
 
-(defmethod initialize-instance ((this ede-cmake-cpp-project)
-				&rest fields)
-  (call-next-method)
+  ;; TODO is this needed?
+  ;; (ede-project-directory-remove-hash (oref this directory))
+  ;; (ede-add-project-to-global-list this)
 
   ;; Call the locate build directory function to populate the build-directories slot.
   (when (and (not (slot-boundp this 'build-directories))
@@ -170,13 +166,15 @@ exist, it should return nil.")
 
   ;; Set up the build tool
   (unless (slot-boundp this 'cmake-build-tool)
-    (oset this cmake-build-tool
-          (if (eq system-type 'windows-nt)
-              (cmake-visual-studio-build-tool)
-            (cmake-make-build-tool
-             (when (slot-boundp this 'build-tool-additional-parameters)
-               :additional-parameters (oref this build-tool-additional-parameters)))
-            )))
+    ;; Take a guess as to what the build tool will be based on the system type. Need a better way to
+    ;; do this, but is there a way to get the information out of CMake?
+    (let ((tool (if (eq system-type 'windows-nt)
+                    (cmake-visual-studio-build-tool "Visual Studio")
+                  (cmake-make-build-tool "GNU Make Tool"))))
+      ;; (when (slot-boundp this 'build-tool-additional-parameters)
+      ;;   (oset tool additional-parameters (oref this build-tool-additional-parameters)))
+      (oset this cmake-build-tool tool)
+      ))
   )
 
   
@@ -186,7 +184,7 @@ exist, it should return nil.")
           (list
            [ "Build Custom Target..." cmake-project-build-custom-target ])))
 
-(defmethod ede-find-target ((proj ede-cmake-project-base) buffer)
+(defmethod ede-find-target ((proj ede-cmake-cpp-project) buffer)
   "Find an EDE target in PROJ for BUFFER.
 If one doesn't exist, create a new one for this directory."
   (let* ((targets (oref proj targets))
@@ -243,6 +241,10 @@ If one doesn't exist, create a new one for this directory."
     (compile cmake-command)
     ))
 
+(defmethod cmake-build-tool-compile ((this ede-cmake-cpp-project) target file)
+  "Invoke the build tool to compile FILE in TARGET"
+  (cmake-build-tool-compile (oref this cmake-build-tool) (cmake-build-directory this) target file))
+
 (defmethod project-compile-project ((this ede-cmake-cpp-project))
   "Compile the project with CMake"
   (cmake-build this))
@@ -250,6 +252,16 @@ If one doesn't exist, create a new one for this directory."
 (defmethod project-compile-target ((this ede-cmake-cpp-target))
   "Compile the target with CMake"
   (cmake-build (ede-project-root (oref this parent)) (ede-target-name this)))
+
+(defmethod project-compile-file ((this ede-cmake-cpp-target) &optional file)
+  "Compile FILE, or the current buffer file if not specified"
+  (let ((file (directory-file-name (or file (buffer-file-name current-buffer)))))
+    (cmake-build-tool-compile (oref this parent) (ede-target-name this) file)))
+
+(defun cmake-project-compile-buffer-file ()
+  "Compile current buffer file"
+  (interactive)
+  (project-compile-file (ede-buffer-object) (buffer-file-name)))
 
 (defmethod project-run-target ((this ede-cmake-cpp-target) &optional args)
   "Run the target"
@@ -280,39 +292,15 @@ If one doesn't exist, create a new one for this directory."
   (ede-preprocessor-map  (oref this parent)))
 
 
-(defmethod ede-project-root ((this ede-cmake-subproject))
-  (ede-project-root (oref this parent)))
-
 (defmethod ede-project-root ((this ede-cmake-cpp-project))
   this)
 
-(defmethod ede-project-root-directory ((this ede-cmake-subproject))
-  (ede-project-root-directory (oref this parent)))
-
 (defmethod ede-project-root-directory ((this ede-cmake-cpp-project))
-  (file-name-directory (oref this directory)))
+  (file-name-directory (oref this file)))
 
-;; (defmethod ede-find-subproject-for-directory ((proj ede-cmake-cpp-project)
-;; 					      dir)
-;;   this)
-
-(defmethod ede-find-subproject-for-directory ((proj ede-cmake-cpp-project)
-					      dir)
-  "Return PROJ, for handling all subdirs below DIR."
-  (let ((ans (call-next-method)))
-    (unless ans
-      ;; FIXME: must be a better way of doing this?
-      (if (string= (file-truename dir) (oref proj directory))
-          proj
-        ;; TODO parse the CMakeLists.txt file for ADD_DIRECTORY declarations?
-        (let ((sp (ede-cmake-subproject
-                   (file-name-nondirectory (directory-file-name dir))
-                   :directory dir
-                   ;;:file (expand-file-name "CMakeLists.txt" dir)
-                   :parent proj)))
-          (ede-add-subproject proj sp)
-          sp)
-        ))))
+(defmethod ede-find-subproject-for-directory ((proj ede-cmake-cpp-project) dir)
+  ;; TODO: read the CMakeLists.txt file and parse the targets
+  this)
 
 (defmethod ede-expand-filename-impl ((proj ede-cmake-cpp-project) name)
   "Within this project PROJ, find the file NAME.
@@ -363,10 +351,11 @@ This knows details about or source tree."
 ;;   "Load a project of type `cpp-root' for the directory DIR.
 ;;      Return nil if there isn't one."
 ;;   (ede-cmake-cpp-project 
-;;    (file-name-nondirectory dir)
-;;    ;; :file (expand-file-name "CMakeLists.txt" dir)
+;;    (file-name-nondirectory (directory-file-name dir))
+;;    :file (expand-file-name "CMakeLists.txt" dir)
 ;;    :locate-build-directory 'my-project-root-build-locator
 ;;    :build-tool-additional-parameters "-j4"
+;;    :locate-fcn 'my-locate-pch-header
 ;;    :include-path '( "/" )
 ;;    :system-include-path (list (expand-file-name "external" dir) )
 ;;    ))

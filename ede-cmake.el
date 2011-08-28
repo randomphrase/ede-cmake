@@ -11,12 +11,17 @@
    )
 )
 
-(defclass ede-cmake-cpp-project (ede-cpp-project ede-project)
+(defclass ede-cmake-project-base (ede-project)
   ((file :type string
 	 :initarg :file
          :initform "CMakeLists.txt"
 	 :documentation "File name where this project is stored.")
-   (locate-build-directory
+   )
+  "Common base class for ede-cmake-cpp-project and ede-cmake-subproject"
+  :abstract t)
+
+(defclass ede-cmake-cpp-project (ede-cmake-project-base ede-cpp-project)
+  ((locate-build-directory
     :initarg :locate-build-directory
     :type function
     :documentation "Function to call to find the build directory
@@ -77,6 +82,15 @@ exist, it should return nil.")
    )
   "EDE CMake C/C++ project.")
 
+(defclass ede-cmake-subproject (ede-cmake-project-base)
+  ((parent
+    :type (or ede-cmake-project-base null)
+    :initarg :parent
+    :documentation "Parent project")
+   )
+  "EDE CMake subproject"
+  )
+
 (defclass cmake-build-tool ()
   ((name
     :type string
@@ -113,9 +127,8 @@ exist, it should return nil.")
           t)
       nil))
 
-(defmethod initialize-instance ((this ede-cmake-cpp-project)
-				&rest fields)
-  ;; Add ourselves to the master list
+(defmethod initialize-instance ((this ede-cmake-project-base)
+                                &rest fields)
   (call-next-method)
 
   (let ((f (expand-file-name (oref this :file))))
@@ -126,6 +139,11 @@ exist, it should return nil.")
     )
   (unless (slot-boundp this 'targets)
     (oset this :targets nil))
+)
+
+(defmethod initialize-instance ((this ede-cmake-cpp-project)
+				&rest fields)
+  (call-next-method)
 
   ;; Call the locate build directory function to populate the build-directories slot.
   (when (and (not (slot-boundp this 'build-directories))
@@ -168,8 +186,7 @@ exist, it should return nil.")
           (list
            [ "Build Custom Target..." cmake-project-build-custom-target ])))
 
-
-(defmethod ede-find-target ((proj ede-cmake-cpp-project) buffer)
+(defmethod ede-find-target ((proj ede-cmake-project-base) buffer)
   "Find an EDE target in PROJ for BUFFER.
 If one doesn't exist, create a new one for this directory."
   (let* ((targets (oref proj targets))
@@ -232,7 +249,7 @@ If one doesn't exist, create a new one for this directory."
 
 (defmethod project-compile-target ((this ede-cmake-cpp-target))
   "Compile the target with CMake"
-  (cmake-build ede-object-project (ede-target-name this)))
+  (cmake-build (ede-project-root (oref this parent)) (ede-target-name this)))
 
 (defmethod project-run-target ((this ede-cmake-cpp-target) &optional args)
   "Run the target"
@@ -263,20 +280,39 @@ If one doesn't exist, create a new one for this directory."
   (ede-preprocessor-map  (oref this parent)))
 
 
-;; FIXME: these methods stolen from ede-cpp-root
+(defmethod ede-project-root ((this ede-cmake-subproject))
+  (ede-project-root (oref this parent)))
 
 (defmethod ede-project-root ((this ede-cmake-cpp-project))
-  "Return my root."
   this)
 
+(defmethod ede-project-root-directory ((this ede-cmake-subproject))
+  (ede-project-root-directory (oref this parent)))
+
 (defmethod ede-project-root-directory ((this ede-cmake-cpp-project))
-  "Return my root."
-  (file-name-directory (oref this file)))
+  (file-name-directory (oref this directory)))
+
+;; (defmethod ede-find-subproject-for-directory ((proj ede-cmake-cpp-project)
+;; 					      dir)
+;;   this)
 
 (defmethod ede-find-subproject-for-directory ((proj ede-cmake-cpp-project)
 					      dir)
   "Return PROJ, for handling all subdirs below DIR."
-  proj)
+  (let ((ans (call-next-method)))
+    (unless ans
+      ;; FIXME: must be a better way of doing this?
+      (if (string= (file-truename dir) (oref proj directory))
+          proj
+        ;; TODO parse the CMakeLists.txt file for ADD_DIRECTORY declarations?
+        (let ((sp (ede-cmake-subproject
+                   (file-name-nondirectory (directory-file-name dir))
+                   :directory dir
+                   ;;:file (expand-file-name "CMakeLists.txt" dir)
+                   :parent proj)))
+          (ede-add-subproject proj sp)
+          sp)
+        ))))
 
 (defmethod ede-expand-filename-impl ((proj ede-cmake-cpp-project) name)
   "Within this project PROJ, find the file NAME.
@@ -311,35 +347,38 @@ This knows details about or source tree."
 
 
 ;; ;; Example only
-;; (add-to-list 'ede-project-class-files
-;;              (ede-project-autoload "cmake" :name "CMAKE ROOT" 
-;;                                    :file 'ede-cmake
-;;                                    :proj-file 'ede-cmake-cpp-project-file-for-dir
-;;                                    :proj-root 'ede-cmake-cpp-project-root
-;;                                    :class-sym 'ede-cmake-cpp-project))
-
-;; ;; Example only
-;; (defvar project-root-build-directories
+;; (defvar my-project-root-build-directories
 ;;   '(("None" . "build")
 ;;     ("Debug" . "build.dbg")
 ;;     ("Release" . "build.rel"))
 ;;   "Alist of build directories in the project root"
 ;;  )
 
-;; ;; Example only
-;; (defun project-root-build-locator (config root-dir)
+;; (defun my-project-root-build-locator (config root-dir)
 ;;   "Locates a build directory in the project root, uses
 ;; project-root-build-directories to look up the name."
-;;   (cdr (assoc config project-root-build-directories)))
+;;   (cdr (assoc config my-project-root-build-directories)))
 
-;; ;; Example only
-;; (defun ede-cmake-load (dir)
-;;   "Load a cmake-cpp-project from DIR."
-;;   (ede-cmake-cpp-project
-;;    "NAME"
-;;    :file (expand-file-name "CMakeLists.txt" dir)
-;;    :locate-build-directory 'project-root-build-locator
-;;    :cmake-build-arguments "-j4"
+;; (defun my-load-project (dir)
+;;   "Load a project of type `cpp-root' for the directory DIR.
+;;      Return nil if there isn't one."
+;;   (ede-cmake-cpp-project 
+;;    (file-name-nondirectory dir)
+;;    ;; :file (expand-file-name "CMakeLists.txt" dir)
+;;    :locate-build-directory 'my-project-root-build-locator
+;;    :build-tool-additional-parameters "-j4"
+;;    :include-path '( "/" )
+;;    :system-include-path (list (expand-file-name "external" dir) )
 ;;    ))
+
+;; (add-to-list 'ede-project-class-files
+;;      	     (ede-project-autoload "CMake"
+;;                                    :name "CMake"
+;;                                    :file 'ede-cmake
+;;                                    :proj-file "CMakeLists.txt"
+;;                                    :load-type 'my-load-project
+;;                                    :class-sym 'ede-cmake-cpp-project)
+;;      	     t)
+
 
 (provide 'ede-cmake)

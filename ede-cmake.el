@@ -5,6 +5,27 @@
 (require 'ede-cpp-project)
 (require 'ede-base)
 
+(defclass cmake-build-tool ()
+  ((file-generator
+    :type string
+    :initarg :file-generator
+    :documentation "Which CMake generator to use for build files")
+   (additional-parameters
+    :initarg :additional-parameters
+    :initform ""
+    :type string
+    :documentation "Additional parameters to build tool")
+   )
+)
+
+(defclass cmake-make-build-tool (cmake-build-tool)
+  ()
+  )
+
+(defclass cmake-visual-studio-build-tool (cmake-build-tool)
+  ()
+  )
+
 (defclass ede-cmake-cpp-target (ede-cpp-target ede-target)
   (
    (parent :initarg :parent)
@@ -46,8 +67,9 @@ variables.")
     :label "Current Configuration"
     :group (settings)
     :documentation "The default configuration.")
-   (cmake-build-tool :initarg :cmake-build-tool
-                     :type cmake-build-tool)
+   (cmake-build-tool
+    :initarg :cmake-build-tool
+    :type cmake-build-tool)
    (build-tool-additional-parameters
     :initarg :build-tool-additional-parameters
     :type string
@@ -78,26 +100,6 @@ exist, it should return nil.")
    )
   "EDE CMake C/C++ project.")
 
-(defclass cmake-build-tool ()
-  ((file-generator
-    :type string
-    :initarg :file-generator
-    :documentation "Which CMake generator to use for build files"))
-   (additional-parameters
-    :initarg :additional-parameters
-    :initform ""
-    :type string
-    :documentation "Additional parameters to build tool")
-)
-
-(defclass cmake-make-build-tool (cmake-build-tool)
-  ()
-  )
-
-(defclass cmake-visual-studio-build-tool (cmake-build-tool)
-  ()
-  )
-
 (defmethod cmake-build-tool-get-target-directory ((this cmake-make-build-tool) project target)
   (let ((builddir (cmake-build-directory project))
         (path (oref target path)))
@@ -105,14 +107,14 @@ exist, it should return nil.")
 
 (defmethod cmake-make-build-tool-invoke ((this cmake-make-build-tool) dir targetname)
   "Invokes make in DIR for TARGETNAME"
-  (let ((default-directory dir)
-        (cmd (format "make %s %s" (or (oref this additional-parameters) "") targetname)))
+  (let* ((args (if (slot-boundp this 'additional-parameters) (oref this additional-parameters) ""))
+         (cmd (format "(cd %s ; make %s %s )" dir args targetname)))
     (compile cmd)))
 
 (defmethod cmake-build-tool-compile ((this cmake-make-build-tool) build-dir targetname file)
   "Compiles FILE in BUILD-DIR in TARGET"
   (let ((dir (concat (file-name-as-directory build-dir) targetname))
-        (doto (concat file ".o")))
+        (doto (concat (file-name-sans-extension (file-name-nondirectory file)) ".o")))
     (cmake-make-build-tool-invoke this dir doto)
     ))
 
@@ -171,8 +173,8 @@ exist, it should return nil.")
     (let ((tool (if (eq system-type 'windows-nt)
                     (cmake-visual-studio-build-tool "Visual Studio")
                   (cmake-make-build-tool "GNU Make Tool"))))
-      ;; (when (slot-boundp this 'build-tool-additional-parameters)
-      ;;   (oset tool additional-parameters (oref this build-tool-additional-parameters)))
+      (when (slot-boundp this 'build-tool-additional-parameters)
+        (oset tool additional-parameters (oref this build-tool-additional-parameters)))
       (oset this cmake-build-tool tool)
       ))
   )
@@ -251,12 +253,12 @@ If one doesn't exist, create a new one for this directory."
 
 (defmethod project-compile-target ((this ede-cmake-cpp-target))
   "Compile the target with CMake"
-  (cmake-build (ede-project-root (oref this parent)) (ede-target-name this)))
+  (cmake-build (ede-project-root (ede-target-parent this)) (ede-target-name this)))
 
 (defmethod project-compile-file ((this ede-cmake-cpp-target) &optional file)
   "Compile FILE, or the current buffer file if not specified"
   (let ((file (directory-file-name (or file (buffer-file-name current-buffer)))))
-    (cmake-build-tool-compile (oref this parent) (ede-target-name this) file)))
+    (cmake-build-tool-compile (ede-target-parent this) (ede-target-name this) file)))
 
 (defun cmake-project-compile-buffer-file ()
   "Compile current buffer file"
@@ -266,10 +268,10 @@ If one doesn't exist, create a new one for this directory."
 (defmethod project-run-target ((this ede-cmake-cpp-target) &optional args)
   "Run the target"
   (require 'ede-shell)
-  (let* ((proj (ede-current-project))
+  (let* ((proj (ede-target-parent this))
          (bindir (cmake-build-tool-get-target-directory (oref proj cmake-build-tool) proj this))
-         (exe (concat bindir (oref this name)))
-         (cmd (if args (concat exe " " args) exe)))
+	 (exe (concat bindir (oref this name)))
+	 (cmd (read-from-minibuffer "Run (like this): " exe)))
     (ede-shell-run-something this cmd)))
 
 (defun cmake-project-build-custom-target (target)
@@ -277,9 +279,9 @@ If one doesn't exist, create a new one for this directory."
   (interactive "MTarget: ")
   (cmake-build (ede-current-project) target))
 
-(defmethod tool-run-target ((tool cmake-build-tool) target)
+(defmethod cmake-build-tool-run-target ((tool cmake-build-tool) target)
   "Run the specified target"
-  (error "tool-run-target not supported by %s" (object-name ot)))
+  (error "cmake-build-tool-run-target not supported by %s" (object-name ot)))
 
 
 

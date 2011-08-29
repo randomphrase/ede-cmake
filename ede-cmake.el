@@ -5,7 +5,7 @@
 (require 'ede-cpp-project)
 (require 'ede-base)
 
-(defclass cmake-build-tool ()
+(defclass ede-cmake-build-tool ()
   ((file-generator
     :type string
     :initarg :file-generator
@@ -18,11 +18,11 @@
    )
 )
 
-(defclass cmake-make-build-tool (cmake-build-tool)
+(defclass cmake-make-build-tool (ede-cmake-build-tool)
   ()
   )
 
-(defclass cmake-visual-studio-build-tool (cmake-build-tool)
+(defclass cmake-visual-studio-build-tool (ede-cmake-build-tool)
   ()
   )
 
@@ -67,9 +67,9 @@ variables.")
     :label "Current Configuration"
     :group (settings)
     :documentation "The default configuration.")
-   (cmake-build-tool
-    :initarg :cmake-build-tool
-    :type cmake-build-tool)
+   (build-tool
+    :initarg :build-tool
+    :type ede-cmake-build-tool)
    (build-tool-additional-parameters
     :initarg :build-tool-additional-parameters
     :type string
@@ -160,14 +160,22 @@ exist, it should return nil.")
   (unless (cmake-build-directory-valid-p (cdr (assoc (oref this configuration-default)
                                                      (oref this build-directories))))
     ;; No, set the first configuration that has a build directory
-    (oset this configuration-default
-          ;; TODO: what if none found?
-          (car (delq nil (mapcar (lambda (c) (if (cmake-build-directory-valid-p (cdr c)) (car c) nil))
-                                 (oref this build-directories))))
-          ))
+    (unless (oset this configuration-default
+                  (or (car (delq nil (mapcar (lambda (c) (if (cmake-build-directory-valid-p (cdr c)) (car c) nil))
+                                     (oref this build-directories))))
+                      ))
 
+      ;; Fallback of last resort - use the project root, but only if it has been used as a
+      ;; build directory before (ie it has a "CMakeFiles" directory)
+      (let ((cmakefiles (concat (file-name-as-directory (oref this directory)) "CMakeFiles")))
+        (when (and (file-exists-p cmakefiles) (file-directory-p cmakefiles))
+          (oset this build-directories (list (cons "None" (oref this directory))))
+          (oset this configuration-default "None")
+          ))
+      ))
+    
   ;; Set up the build tool
-  (unless (slot-boundp this 'cmake-build-tool)
+  (unless (slot-boundp this 'build-tool)
     ;; Take a guess as to what the build tool will be based on the system type. Need a better way to
     ;; do this, but is there a way to get the information out of CMake?
     (let ((tool (if (eq system-type 'windows-nt)
@@ -175,7 +183,7 @@ exist, it should return nil.")
                   (cmake-make-build-tool "GNU Make Tool"))))
       (when (slot-boundp this 'build-tool-additional-parameters)
         (oset tool additional-parameters (oref this build-tool-additional-parameters)))
-      (oset this cmake-build-tool tool)
+      (oset this build-tool tool)
       ))
   )
 
@@ -245,7 +253,7 @@ If one doesn't exist, create a new one for this directory."
 
 (defmethod cmake-build-tool-compile ((this ede-cmake-cpp-project) target file)
   "Invoke the build tool to compile FILE in TARGET"
-  (cmake-build-tool-compile (oref this cmake-build-tool) (cmake-build-directory this) target file))
+  (cmake-build-tool-compile (oref this build-tool) (cmake-build-directory this) target file))
 
 (defmethod project-compile-project ((this ede-cmake-cpp-project))
   "Compile the project with CMake"
@@ -279,7 +287,7 @@ If one doesn't exist, create a new one for this directory."
   (interactive "MTarget: ")
   (cmake-build (ede-current-project) target))
 
-(defmethod cmake-build-tool-run-target ((tool cmake-build-tool) target)
+(defmethod cmake-build-tool-run-target ((tool ede-cmake-build-tool) target)
   "Run the specified target"
   (error "cmake-build-tool-run-target not supported by %s" (object-name ot)))
 

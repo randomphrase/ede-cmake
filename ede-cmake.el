@@ -283,8 +283,6 @@ If one doesn't exist, create a new one for this directory."
   "Run the specified target"
   (error "cmake-build-tool-run-target not supported by %s" (object-name ot)))
 
-
-
 (defmethod ede-system-include-path ((this ede-cmake-cpp-target))
   "Get the system include path used by target THIS."
   (ede-system-include-path (oref this parent)))
@@ -293,6 +291,16 @@ If one doesn't exist, create a new one for this directory."
   "Get the pre-processor map for project THIS."
   (ede-preprocessor-map  (oref this parent)))
 
+(defun ede-cmake-cpp-project-root (&optional dir)
+  "Gets the root directory for DIR."
+  ;; Naive algorithm which just looks up in the directory heirarchy for until it doesn't find a
+  ;; CMakeLists.txt file, and the last one is assumed to be the project root.
+  ;; TODO: parse the CMakeLists.txt files and looking for PROJECT(..) commands.
+  (if (file-exists-p (concat (file-name-as-directory dir) "CMakeLists.txt"))
+      (let ((updir (ede-up-directory dir)))
+        (or (and updir (ede-cmake-cpp-project-root updir))
+            dir))
+    nil))
 
 (defmethod ede-project-root ((this ede-cmake-cpp-project))
   this)
@@ -367,6 +375,7 @@ This knows details about or source tree."
 ;;                                    :name "CMake"
 ;;                                    :file 'ede-cmake
 ;;                                    :proj-file "CMakeLists.txt"
+;;                                    :proj-root 'ede-cmake-cpp-project-root
 ;;                                    :load-type 'my-load-project
 ;;                                    :class-sym 'ede-cmake-cpp-project)
 ;;      	     t)

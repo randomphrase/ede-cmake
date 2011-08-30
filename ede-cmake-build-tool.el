@@ -3,9 +3,9 @@
 ;; Author: Alastair Rankine <alastair@girtby.net>
 
 (defclass ede-cmake-build-tool ()
-  ((file-generator
+  ((generator-string
     :type string
-    :initarg :file-generator
+    :initarg :generator-string
     :documentation "Which CMake generator to use for build files")
    (additional-parameters
     :initarg :additional-parameters
@@ -16,7 +16,11 @@
 )
 
 (defclass cmake-make-build-tool (ede-cmake-build-tool)
-  ()
+  ((generator-string
+    :type string
+    :initarg :generator-string
+    :initform "Unix Makefiles")
+   )
   )
 
 (defclass cmake-visual-studio-build-tool (ede-cmake-build-tool)

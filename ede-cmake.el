@@ -144,14 +144,11 @@ exist, it should return nil.")
   (unless (slot-boundp this 'build-tool)
     ;; Take a guess as to what the build tool will be based on the system type. Need a better way to
     ;; do this, but is there a way to get the information out of CMake?
-    (let ((tool (if (eq system-type 'windows-nt)
-                    (cmake-visual-studio-build-tool "Visual Studio")
-                  (cmake-make-build-tool "GNU Make Tool"))))
-      (when (slot-boundp this 'build-tool-additional-parameters)
-        (oset tool additional-parameters (oref this build-tool-additional-parameters)))
-      (oset this build-tool tool)
-      ))
+    (oset this build-tool (if (eq system-type 'windows-nt)
+                              (cmake-visual-studio-build-tool "Visual Studio")
+                            (cmake-make-build-tool "GNU Make Tool")))
   )
+)
 
   
 (defmethod ede-menu-items-build ((this ede-cmake-cpp-project) &optional current)
@@ -201,10 +198,10 @@ If one doesn't exist, create a new one for this directory."
   "Set up build directory for configuration type CONFIG, or configuration-default if not set"
     (let* ((config (or config (oref this configuration-default)))
            (default-directory (file-name-as-directory (cmake-build-directory this config)))
-           (cmake-define-build-type (if (string= config "None") ""
-                                      (concat "-DCMAKE_BUILD_TYPE=" config)))
-           (cmake-command (concat "cmake " cmake-define-build-type " "
-                                  (oref this directory) )))
+           (generator (oref (oref this build-tool) generator-string))
+           (define-build-type (if (string= config "None") ""
+                                (concat "-DCMAKE_BUILD_TYPE=" config)))
+           (cmake-command (format "cmake -G \"%s\" %s %s " generator define-build-type (oref this directory) )))
       (compile cmake-command)
     ))
 
@@ -216,8 +213,8 @@ If one doesn't exist, create a new one for this directory."
 (defmethod cmake-build ((this ede-cmake-cpp-project) &optional target-name)
   (let* ((build-dir (cmake-build-directory this))
          (target-arg (if target-name (concat " --target " target-name) ""))
-         (additional-args (if (slot-boundp this 'build-tool-additional-parameters)
-                             (concat " -- " (oref this build-tool-additional-parameters) "")))
+         (additional-args (if (slot-boundp (oref this build-tool) 'additional-parameters)
+                             (concat " -- " (oref (oref this build-tool) additional-parameters) "")))
          (cmake-command (concat "cmake --build " build-dir target-arg
                                " --config " (oref this configuration-default)
                                additional-args)))
@@ -347,8 +344,7 @@ This knows details about or source tree."
 ;;    (file-name-nondirectory (directory-file-name dir))
 ;;    :file (expand-file-name "CMakeLists.txt" dir)
 ;;    :locate-build-directory 'my-project-root-build-locator
-;;    :build-tool-additional-parameters "-j4"
-;;    :locate-fcn 'my-locate-pch-header
+;;    :build-tool (cmake-make-build-tool "Make" :additional-parameters "-j4 -kr")
 ;;    :include-path '( "/" )
 ;;    :system-include-path (list (expand-file-name "external" dir) )
 ;;    ))

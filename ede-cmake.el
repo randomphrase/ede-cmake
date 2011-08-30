@@ -3,32 +3,16 @@
 ;; Author: Alastair Rankine <alastair@girtby.net>
 
 (require 'ede-cpp-project)
+;;(require 'cmake-lists-parser)
+(require 'ede-cmake-build-tool)
 (require 'ede-base)
-
-(defclass ede-cmake-build-tool ()
-  ((file-generator
-    :type string
-    :initarg :file-generator
-    :documentation "Which CMake generator to use for build files")
-   (additional-parameters
-    :initarg :additional-parameters
-    :initform ""
-    :type string
-    :documentation "Additional parameters to build tool")
-   )
-)
-
-(defclass cmake-make-build-tool (ede-cmake-build-tool)
-  ()
-  )
-
-(defclass cmake-visual-studio-build-tool (ede-cmake-build-tool)
-  ()
-  )
 
 (defclass ede-cmake-cpp-target (ede-cpp-target ede-target)
   (
    (parent :initarg :parent)
+   (keybindings :allocation :class
+                :initform (("F" . cmake-project-compile-buffer-file)
+                           (("D" . ede-debug-target))))
    )
 )
 
@@ -99,24 +83,6 @@ exist, it should return nil.")
          :documentation "Menu items for this project")
    )
   "EDE CMake C/C++ project.")
-
-(defmethod cmake-build-tool-get-target-directory ((this cmake-make-build-tool) project target)
-  (let ((builddir (cmake-build-directory project))
-        (path (oref target path)))
-    (concat (file-name-as-directory builddir) (file-name-as-directory path))))
-
-(defmethod cmake-make-build-tool-invoke ((this cmake-make-build-tool) dir targetname)
-  "Invokes make in DIR for TARGETNAME"
-  (let* ((args (if (slot-boundp this 'additional-parameters) (oref this additional-parameters) ""))
-         (cmd (format "(cd %s ; make %s %s )" dir args targetname)))
-    (compile cmd)))
-
-(defmethod cmake-build-tool-compile ((this cmake-make-build-tool) build-dir targetname file)
-  "Compiles FILE in BUILD-DIR in TARGET"
-  (let ((dir (concat (file-name-as-directory build-dir) targetname))
-        (doto (concat (file-name-sans-extension (file-name-nondirectory file)) ".o")))
-    (cmake-make-build-tool-invoke this dir doto)
-    ))
 
 (defun cmake-build-directory-valid-p (dir)
   "Returns DIR if a valid build directory, nil otherwise. Also resolves symlinks."
@@ -194,6 +160,11 @@ exist, it should return nil.")
           (list
            [ "Build Custom Target..." cmake-project-build-custom-target ])))
 
+(defmethod ede-cmake-create-targets-for-directory ((proj ede-cmake-cpp-project) path)
+  "Parse the CMakeLists.txt file and extract the targets."
+  ;; TODO: Cache the timestamp of the project file and rescan iff necessary
+  )
+
 (defmethod ede-find-target ((proj ede-cmake-cpp-project) buffer)
   "Find an EDE target in PROJ for BUFFER.
 If one doesn't exist, create a new one for this directory."
@@ -203,13 +174,15 @@ If one doesn't exist, create a new one for this directory."
 	 (ans (object-assoc path :path targets))
 	 )
     (when (not ans)
-      ;; TODO: factor out to separate function, allow multiple targets to be created in single dir
-      (setq ans (ede-cmake-cpp-target path
+      (setq ans (ede-cmake-cpp-target
+                 path
                  :name (file-name-nondirectory dirname)
-		 :path path
-		 :source nil
+                 :path path
+                 :source nil
                  :parent proj))
       (object-add-to-list proj :targets ans)
+      ;; TODO: move the above in here:
+      ;;(ede-cmake-create-targets-for-directory this path)
       )
     ans))
 
@@ -251,10 +224,6 @@ If one doesn't exist, create a new one for this directory."
     (compile cmake-command)
     ))
 
-(defmethod cmake-build-tool-compile ((this ede-cmake-cpp-project) target file)
-  "Invoke the build tool to compile FILE in TARGET"
-  (cmake-build-tool-compile (oref this build-tool) (cmake-build-directory this) target file))
-
 (defmethod project-compile-project ((this ede-cmake-cpp-project))
   "Compile the project with CMake"
   (cmake-build this))
@@ -265,22 +234,28 @@ If one doesn't exist, create a new one for this directory."
 
 (defmethod project-compile-file ((this ede-cmake-cpp-target) &optional file)
   "Compile FILE, or the current buffer file if not specified"
-  (let ((file (directory-file-name (or file (buffer-file-name current-buffer)))))
-    (cmake-build-tool-compile (ede-target-parent this) (ede-target-name this) file)))
+  (let ((file (directory-file-name (or file (buffer-file-name (current-buffer))))))
+    (compile-target-file (oref (ede-target-parent this) build-tool) this file)))
 
 (defun cmake-project-compile-buffer-file ()
   "Compile current buffer file"
   (interactive)
-  (project-compile-file (ede-buffer-object) (buffer-file-name)))
+  (project-compile-file (ede-buffer-object)))
 
 (defmethod project-run-target ((this ede-cmake-cpp-target) &optional args)
   "Run the target"
   (require 'ede-shell)
-  (let* ((proj (ede-target-parent this))
-         (bindir (cmake-build-tool-get-target-directory (oref proj cmake-build-tool) proj this))
-	 (exe (concat bindir (oref this name)))
+  (let* ((exe (target-binary (oref (ede-target-parent this) build-tool) this))
 	 (cmd (read-from-minibuffer "Run (like this): " exe)))
     (ede-shell-run-something this cmd)))
+
+(defmethod project-debug-target ((this ede-cmake-cpp-project) target)
+  "Debug the target"
+  (debug-target (oref this build-tool) target))
+
+(defmethod project-debug-target ((this ede-cmake-cpp-target))
+  "Debug the target"
+  (project-debug-target (ede-project-root (ede-target-parent this)) this))
 
 (defun cmake-project-build-custom-target (target)
   "Prompt for a custom target and build it in the current project"
@@ -366,7 +341,7 @@ This knows details about or source tree."
 ;;   (cdr (assoc config my-project-root-build-directories)))
 
 ;; (defun my-load-project (dir)
-;;   "Load a project of type `cpp-root' for the directory DIR.
+;;   "Load a project of type `ede-cmake-cpp-project' for the directory DIR.
 ;;      Return nil if there isn't one."
 ;;   (ede-cmake-cpp-project 
 ;;    (file-name-nondirectory (directory-file-name dir))

@@ -17,12 +17,7 @@
 )
 
 (defclass ede-cmake-cpp-project (ede-cpp-project ede-project)
-  ((file
-    :type string
-    :initarg :file
-    :initform "CMakeLists.txt"
-    :documentation "File name where this project is stored.")
-   (locate-build-directory
+  ((locate-build-directory
     :initarg :locate-build-directory
     :type function
     :documentation "Function to call to find the build directory
@@ -96,12 +91,12 @@ exist, it should return nil.")
 				&rest fields)
   (call-next-method)
 
-  (let ((f (expand-file-name (oref this :file))))
-    (oset this file f)
-    (oset this directory (file-name-directory f))
-    (unless (slot-boundp this 'name)
-      (oset this name (directory-file-name f)))
-    )
+  ;; Default name of the project to the name of the directory the project is found in
+  (unless (slot-boundp this 'name)
+    (oset this name (file-name-nondirectory (directory-file-name (oref this directory)))))
+  ;; Set file if not already set
+  (unless (slot-boundp this 'file)
+    (oset this file (expand-file-name "CMakeLists.txt" (oref this directory))))
   (unless (slot-boundp this 'targets)
     (oset this :targets nil))
 
@@ -342,7 +337,7 @@ This knows details about or source tree."
 ;;      Return nil if there isn't one."
 ;;   (ede-cmake-cpp-project 
 ;;    (file-name-nondirectory (directory-file-name dir))
-;;    :file (expand-file-name "CMakeLists.txt" dir)
+;;    :directory dir
 ;;    :locate-build-directory 'my-project-root-build-locator
 ;;    :build-tool (cmake-make-build-tool "Make" :additional-parameters "-j4 -kr")
 ;;    :include-path '( "/" )
@@ -351,7 +346,6 @@ This knows details about or source tree."
 
 ;; (add-to-list 'ede-project-class-files
 ;;      	     (ede-project-autoload "CMake"
-;;                                    :name "CMake"
 ;;                                    :file 'ede-cmake
 ;;                                    :proj-file "CMakeLists.txt"
 ;;                                    :proj-root 'ede-cmake-cpp-project-root

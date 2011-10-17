@@ -23,10 +23,6 @@
     :documentation "Function to call to find the build directory
 for a given configuration. Takes two arguments, the config and
 the project root directory")
-   (build-directories
-    :initarg :build-directories
-    :type list
-    :documentation "Per-configuration build directory")
    (configurations
     :initarg :configurations
     :initform ("None" "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
@@ -46,6 +42,14 @@ variables.")
     :label "Current Configuration"
     :group (settings)
     :documentation "The default configuration.")
+   (configuration-build-directories
+    :initarg :configuration-build-directories
+    :type list
+    :documentation "Per-configuration build directory")
+   (build-directory
+    :initarg :build-directory
+    :custom string
+    :label "Current Build Directory")
    (build-tool
     :initarg :build-tool
     :type ede-cmake-build-tool)
@@ -104,12 +108,12 @@ exist, it should return nil.")
   ;; (ede-project-directory-remove-hash (oref this directory))
   ;; (ede-add-project-to-global-list this)
 
-  ;; Call the locate build directory function to populate the build-directories slot.
-  (when (and (not (slot-boundp this 'build-directories))
+  ;; Call the locate build directory function to populate the configuration-build-directories slot.
+  (when (and (not (slot-boundp this 'configuration-build-directories))
              (slot-boundp this 'locate-build-directory))
     (let ((locatefn (oref this locate-build-directory))
           (dir-root (oref this directory)))
-      (oset this build-directories
+      (oset this configuration-build-directories
             (mapcar (lambda (c) (cons c (let ((d (funcall locatefn c dir-root)))
                                           (when d
                                             (if (file-name-absolute-p d) d
@@ -117,23 +121,34 @@ exist, it should return nil.")
                     (oref this configurations)))
       ))
 
-  ;; Does the configuration-default have a valid build directory?
-  (unless (cmake-build-directory-valid-p (cdr (assoc (oref this configuration-default)
-                                                     (oref this build-directories))))
-    ;; No, set the first configuration that has a build directory
-    (unless (oset this configuration-default
-                  (or (car (delq nil (mapcar (lambda (c) (if (cmake-build-directory-valid-p (cdr c)) (car c) nil))
-                                     (oref this build-directories))))
-                      ))
+  (unless (slot-boundp this 'build-directory)
 
-      ;; Fallback of last resort - use the project root, but only if it has been used as a
-      ;; build directory before (ie it has a "CMakeFiles" directory)
-      (let ((cmakefiles (concat (file-name-as-directory (oref this directory)) "CMakeFiles")))
-        (when (and (file-exists-p cmakefiles) (file-directory-p cmakefiles))
-          (oset this build-directories (list (cons "None" (oref this directory))))
-          (oset this configuration-default "None")
-          ))
-      ))
+    ;; Does the configuration-default have a valid build directory?
+    (let ((config-default-build-dir (cdr (assoc (oref this configuration-default)
+                                                (oref this configuration-build-directories)))))
+      (if (cmake-build-directory-valid-p config-default-build-dir)
+          ;; Yes, just use it:
+          (oset this build-directory config-default-build-dir)
+        
+        ;; No, set the first configuration that has a valid build directory
+        (let ((first-valid-config-build-dir (car (delq nil (mapcar (lambda (c) (if (cmake-build-directory-valid-p (cdr c)) c nil))
+                                                                    (oref this configuration-build-directories))))))
+          (if first-valid-config-build-dir
+              (progn
+                (oset this configuration-default (car first-valid-config-build-dir))
+                (oset this build-directory (cdr first-valid-config-build-dir)))
+            
+            ;; Fallback of last resort - use the project root, but only if it has been used as a
+            ;; build directory before (ie it has a "CMakeFiles" directory)
+            (let ((cmakefiles (concat (file-name-as-directory (oref this directory)) "CMakeFiles")))
+              (when (and (file-exists-p cmakefiles) (file-directory-p cmakefiles))
+                (oset this build-directory (oref this directory))
+                (oset this configuration-build-directories (list (cons "None" (oref this directory))))
+                (oset this configuration-default "None")
+                ))
+            ))
+        ))
+    )
     
   ;; Set up the build tool
   (unless (slot-boundp this 'build-tool)
@@ -178,16 +193,9 @@ If one doesn't exist, create a new one for this directory."
       )
     ans))
 
-(defmethod cmake-build-directory ((this ede-cmake-cpp-project) &optional config)
-  "Returns the current build directory. Raises an error if the build directory is not valid"
-  (let* ((config (or config (oref this configuration-default)))
-         (build-dir (cdr (assoc config (oref this build-directories)))))
-    (unless build-dir
-      (error "Build directory not set"))
-    (unless (and (file-exists-p build-dir) (file-directory-p build-dir))
-      (error "Build directory doesn't exist (or is not a directory): %S" build-dir))
-    build-dir
-    ))
+(defmethod cmake-build-directory ((this ede-cmake-cpp-project))
+ "Returns the current build directory. Raises an error if the build directory is not valid"
+ (oref this build-directory))
 
 (defmethod cmake-configure-build-directory ((this ede-cmake-cpp-project) &optional config)
   "Set up build directory for configuration type CONFIG, or configuration-default if not set"

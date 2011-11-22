@@ -50,7 +50,7 @@
 (defmethod compile-target-file ((this cmake-make-build-tool) target file)
   "Compiles FILE in BUILD-DIR in TARGET"
   (let* ((dir (target-build-dir this target))
-         (doto (concat dir (file-name-sans-extension (file-name-nondirectory file)) ".o")))
+         (doto (concat(file-name-sans-extension (file-name-nondirectory file)) ".o")))
     (invoke-make this dir doto)
     ))
 

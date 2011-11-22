@@ -197,10 +197,10 @@ If one doesn't exist, create a new one for this directory."
  "Returns the current build directory. Raises an error if the build directory is not valid"
  (oref this build-directory))
 
-(defmethod cmake-configure-build-directory ((this ede-cmake-cpp-project) &optional config)
+(defmethod cmake-configure-build-directory ((this ede-cmake-cpp-project))
   "Set up build directory for configuration type CONFIG, or configuration-default if not set"
-    (let* ((config (or config (oref this configuration-default)))
-           (default-directory (file-name-as-directory (cmake-build-directory this config)))
+    (let* ((config (oref this configuration-default))
+           (default-directory (file-name-as-directory (oref this build-directory)))
            (generator (oref (oref this build-tool) generator-string))
            (define-build-type (if (string= config "None") ""
                                 (concat "-DCMAKE_BUILD_TYPE=" config)))

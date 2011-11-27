@@ -304,10 +304,9 @@ This knows details about or source tree."
   (let ((ans (call-next-method)))
     (unless ans
       (let* ((lf (oref proj locate-fcn))
-	     (dir (file-name-directory (oref proj file)))
-             (lfans (funcall lf name dir)))
-	(if lfans
-	    (setq ans lfans)
+	     (dir (file-name-directory (oref proj file))))
+	(if lf
+	    (setq ans (funcall lf name dir))
 	  (if (ede-cpp-header-file-p proj name)
 	      ;; Else, use our little hack.
 	      (let ((ip (oref proj include-path))

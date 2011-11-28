@@ -49,7 +49,8 @@ variables.")
    (build-directory
     :initarg :build-directory
     :custom string
-    :label "Current Build Directory")
+    :label "Current Build Directory - takes precedence over
+    per-configuration build directory if set")
    (build-tool
     :initarg :build-tool
     :type ede-cmake-build-tool)
@@ -77,6 +78,7 @@ exist, it should return nil.")
    (menu :allocation :class
 	 :initform
 	 (
+          [ "Set Configuration Build Directory..." cmake-project-configuration-build-directory-set ]
 	  [ "Configure CMake Build Directory" cmake-configure-current-build-directory ]
           )
          :documentation "Menu items for this project")
@@ -88,7 +90,7 @@ exist, it should return nil.")
     (if (and dir (file-exists-p dir) (file-directory-p dir))
         (if (file-symlink-p dir)
             (file-truename dir)
-          t)
+          dir)
       nil))
 
 (defmethod initialize-instance ((this ede-cmake-cpp-project)
@@ -121,35 +123,33 @@ exist, it should return nil.")
                     (oref this configurations)))
       ))
 
-  (unless (slot-boundp this 'build-directory)
+  (if (slot-boundp this 'build-directory)
+      (oset this configuration-default "None")
 
     ;; Does the configuration-default have a valid build directory?
-    (let ((config-default-build-dir (cdr (assoc (oref this configuration-default)
-                                                (oref this configuration-build-directories)))))
-      (if (cmake-build-directory-valid-p config-default-build-dir)
+    (let ((config-default-build (assoc (oref this configuration-default)
+                                       (oref this configuration-build-directories))))
+      (if (cmake-build-directory-valid-p (cdr config-default-build))
           ;; Yes, just use it:
-          (oset this build-directory config-default-build-dir)
+          (oset this configuration-default (car config-default-build))
         
         ;; No, set the first configuration that has a valid build directory
         (let ((first-valid-config-build-dir (car (delq nil (mapcar (lambda (c) (if (cmake-build-directory-valid-p (cdr c)) c nil))
                                                                     (oref this configuration-build-directories))))))
           (if first-valid-config-build-dir
-              (progn
-                (oset this configuration-default (car first-valid-config-build-dir))
-                (oset this build-directory (cdr first-valid-config-build-dir)))
+              (oset this configuration-default (car first-valid-config-build-dir))
             
             ;; Fallback of last resort - use the project root, but only if it has been used as a
             ;; build directory before (ie it has a "CMakeFiles" directory)
             (let ((cmakefiles (concat (file-name-as-directory (oref this directory)) "CMakeFiles")))
               (when (and (file-exists-p cmakefiles) (file-directory-p cmakefiles))
-                (oset this build-directory (oref this directory))
                 (oset this configuration-build-directories (list (cons "None" (oref this directory))))
                 (oset this configuration-default "None")
                 ))
             ))
         ))
     )
-    
+
   ;; Set up the build tool
   (unless (slot-boundp this 'build-tool)
     ;; Take a guess as to what the build tool will be based on the system type. Need a better way to
@@ -171,6 +171,37 @@ exist, it should return nil.")
   "Parse the CMakeLists.txt file and extract the targets."
   ;; TODO: Cache the timestamp of the project file and rescan iff necessary
   )
+
+(defun cmake-project-configuration-build-directory-set (dir)
+  "Prompt for a directory and set it as the build directory for
+the current configuration in the current project"
+  (interactive "DDirectory: ")
+  (ede-configuration-build-directory-set (ede-current-project) dir))
+
+(defmethod ede-configuration-build-directory-set ((this ede-cmake-cpp-project) directory)
+  "Sets the build directory for the current configuration."
+  (let ((builddir (cmake-build-directory-valid-p directory))
+        (conf (assoc (oref this configuration-default) (oref this configuration-build-directories))))
+    (unless builddir
+      (error (format "not a valid build directory: %s" directory)))
+    (if (consp conf)
+        (setcdr conf builddir)
+      (add-to-list (oref this configuration-build-directories) 
+                   (cons (oref this configuration-default) builddir)))
+    (slot-makeunbound this 'build-directory)))
+
+(defmethod ede-default-configuration-set ((this ede-cmake-cpp-project) newconfig)
+  "Set the default configuration to NEWCONFIG. Checks that it is
+a valid config against the configurations slot"
+  (unless (assoc newconfig (oref this configurations))
+    (error (format "configuration %s not valid for this project" newconfig)))
+  (oset this default-configuration newconfig)
+)
+
+(defun cmake-project-build-custom-target (target)
+  "Prompt for a custom target and build it in the current project"
+  (interactive "MTarget: ")
+  (cmake-build (ede-current-project) target))
 
 (defmethod ede-find-target ((proj ede-cmake-cpp-project) buffer)
   "Find an EDE target in PROJ for BUFFER.
@@ -195,12 +226,21 @@ If one doesn't exist, create a new one for this directory."
 
 (defmethod cmake-build-directory ((this ede-cmake-cpp-project))
  "Returns the current build directory. Raises an error if the build directory is not valid"
- (oref this build-directory))
+ ;; if the current build-directory is set, we always use it
+ (if (slot-boundp this 'build-directory)
+     (oref this build-directory)
+   (let* ((config (assoc (oref this configuration-default) (oref this configuration-build-directories)))
+          (validdir (and (consp config) (cmake-build-directory-valid-p (cdr config)))))
+     ;; if the configuration build directory is valid, we use it
+     (unless validdir
+       (error "No valid build directory found"))
+     validdir
+   )))
 
 (defmethod cmake-configure-build-directory ((this ede-cmake-cpp-project))
   "Set up build directory for configuration type CONFIG, or configuration-default if not set"
     (let* ((config (oref this configuration-default))
-           (default-directory (file-name-as-directory (oref this build-directory)))
+           (default-directory (file-name-as-directory (cmake-build-directory this)))
            (generator (oref (oref this build-tool) generator-string))
            (define-build-type (if (string= config "None") ""
                                 (concat "-DCMAKE_BUILD_TYPE=" config)))

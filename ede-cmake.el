@@ -345,23 +345,24 @@ This knows details about or source tree."
     (unless ans
       (let* ((lf (oref proj locate-fcn))
 	     (dir (file-name-directory (oref proj file))))
-	(if lf
-	    (setq ans (funcall lf name dir))
-	  (if (ede-cpp-header-file-p proj name)
-	      ;; Else, use our little hack.
-	      (let ((ip (oref proj include-path))
-		    (tmp nil))
-		(while ip
-		  ;; Translate
-		  (setq tmp (ede-cpp-translate-file proj (car ip)))
-		  ;; Test this name.
-		  (setq tmp (expand-file-name name tmp))
-		  (if (file-exists-p tmp)
-		      (setq ans tmp))
-		  (setq ip (cdr ip)) ))
-	    ;; Else, do the usual.
-	    (setq ans (call-next-method)))
-	  )))
+	(when lf
+	    (setq ans (funcall lf name dir proj)))))
+    (unless ans
+      (if (ede-cpp-header-file-p proj name)
+          ;; Else, use our little hack.
+          (let ((ip (oref proj include-path))
+                (tmp nil))
+            (while ip
+              ;; Translate
+              (setq tmp (ede-cpp-translate-file proj (car ip)))
+              ;; Test this name.
+              (setq tmp (expand-file-name name tmp))
+              (if (file-exists-p tmp)
+                  (setq ans tmp))
+              (setq ip (cdr ip)) ))
+        ;; Else, do the usual.
+        (setq ans (call-next-method)))
+      )
     ;; TODO - does this call-next-method happen twice.  Is that bad??  Why is it here?
     (or ans (call-next-method))))
 

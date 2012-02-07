@@ -392,14 +392,15 @@ This knows details about or source tree."
 ;;    :system-include-path (list (expand-file-name "external" dir) )
 ;;    ))
 
-;; (add-to-list 'ede-project-class-files
-;;      	     (ede-project-autoload "CMake"
-;;                                    :file 'ede-cmake
-;;                                    :proj-file "CMakeLists.txt"
-;;                                    :proj-root 'ede-cmake-cpp-project-root
-;;                                    :load-type 'my-load-project
-;;                                    :class-sym 'ede-cmake-cpp-project)
-;;      	     t)
+;; (ede-add-project-autoload
+;;  (ede-project-autoload "CMake"
+;;                        :file 'ede-cmake
+;;                        :proj-file "CMakeLists.txt"
+;;                        :proj-root 'ede-cmake-cpp-project-root
+;;                        :proj-root-dirmatch ""
+;;                        :load-type 'my-load-project
+;;                        :class-sym 'ede-cmake-cpp-project)
+;;  'unique)
 
 
 (provide 'ede-cmake)

@@ -331,7 +331,7 @@ If one doesn't exist, create a new one for this directory."
 (defmethod ede-project-root-directory ((this ede-cmake-cpp-project))
   (file-name-directory (oref this file)))
 
-(defmethod ede-find-subproject-for-directory ((proj ede-cmake-cpp-project) dir)
+(defmethod ede-find-subproject-for-directory ((this ede-cmake-cpp-project) dir)
   ;; TODO: read the CMakeLists.txt file and parse the targets
   this)
 

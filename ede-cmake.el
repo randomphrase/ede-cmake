@@ -272,6 +272,16 @@ If one doesn't exist, create a new one for this directory."
   "Compile the target with CMake"
   (cmake-build (ede-project-root (ede-target-parent this)) (ede-target-name this)))
 
+(defmethod project-compile-target-fast ((this ede-cmake-cpp-target))
+  "Compile the target with CMake using the fast variant (minus dependencies)"
+  (let ((fasttarget (concat (ede-target-name this) "/fast")))
+    (cmake-build (ede-project-root (ede-target-parent this)) fasttarget)))
+
+(defun cmake-project-compile-target-fast ()
+  "Compile current target with the fast variant"
+  (interactive)
+  (ede-invoke-method 'project-compile-target-fast))
+
 (defmethod project-compile-file ((this ede-cmake-cpp-target) &optional file)
   "Compile FILE, or the current buffer file if not specified"
   (let ((file (directory-file-name (or file (buffer-file-name (current-buffer))))))

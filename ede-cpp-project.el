@@ -87,7 +87,7 @@ This is for project include paths and spp source files."
   "Set variables local to PROJECT in BUFFER.
 Also set up the lexical preprocessor map."
   (call-next-method)
-  (when (and (featurep 'semantic-c) (featurep 'semantic-lex-spp))
+  (when (and (featurep 'semantic/bovine/c) (featurep 'semantic/lex-spp))
     (setq semantic-lex-spp-project-macro-symbol-obarray
 	  (semantic-lex-make-spp-table (oref project spp-table)))
     ))
@@ -98,6 +98,7 @@ Also set up the lexical preprocessor map."
   
 (defmethod ede-preprocessor-map ((this ede-cpp-project))
   "Get the pre-processor map for project THIS."
+  (require 'semantic/db)
   (let ((spp (oref this spp-table))
 	(root (ede-project-root this))
 	)
@@ -107,10 +108,10 @@ Also set up the lexical preprocessor map."
 	      (table (when expfile
 		       (semanticdb-file-table-object expfile)))
 	      )
-	 (when (not table)
-	   (message "Cannot find file %s in project." F))
-	 (when (and table (semanticdb-needs-refresh-p table))
-	   (semanticdb-refresh-table table)
+	 (if (not table)
+	     (message "Cannot find file %s in project." F)
+	   (when (semanticdb-needs-refresh-p table)
+	     (semanticdb-refresh-table table))
 	   (setq spp (append spp (oref table lexical-table))))))
      (oref this spp-files))
     spp))
@@ -118,7 +119,7 @@ Also set up the lexical preprocessor map."
 (defmethod ede-system-include-path ((this ede-cpp-target))
   "Get the system include path used by target THIS."
   (ede-system-include-path (ede-target-parent this)))
-  
+
 (defmethod ede-preprocessor-map ((this ede-cpp-target))
   "Get the pre-processor map for project THIS."
   (ede-preprocessor-map  (ede-target-parent this)))

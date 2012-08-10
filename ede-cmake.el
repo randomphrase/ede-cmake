@@ -75,8 +75,7 @@ The function symbol must take two arguments:
 It should return the fully qualified file name passed in from NAME.  If that file does not
 exist, it should return nil.")
 
-   (menu :allocation :class
-	 :initform
+   (menu :initform
 	 (
           [ "Set Configuration Build Directory..." cmake-project-configuration-build-directory-set ]
 	  [ "Configure CMake Build Directory" cmake-configure-current-build-directory ]

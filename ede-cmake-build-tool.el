@@ -59,7 +59,7 @@
 (defmethod debug-target ((this cmake-makelike-build-tool) target)
   "Invokes gdb to debug TARGET in BUILD-DIR"
   (let* ((exe (target-binary this target))
-         (cmd (concat "gdb --annotate=3 " exe)))
+         (cmd (concat "gdb -i=mi " exe)))
     (gdb cmd)))
 
 

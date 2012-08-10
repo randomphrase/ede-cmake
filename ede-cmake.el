@@ -5,7 +5,7 @@
 (require 'ede-cpp-project)
 ;;(require 'cmake-lists-parser)
 (require 'ede-cmake-build-tool)
-(require 'ede-base)
+;(require 'ede-base)
 
 (defclass ede-cmake-cpp-target (ede-cpp-target ede-target)
   (

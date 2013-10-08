@@ -199,7 +199,11 @@ a valid config against the configurations slot"
 
 (defun cmake-project-build-custom-target (target)
   "Prompt for a custom target and build it in the current project"
-  (interactive "MTarget: ")
+  (interactive
+   (let* ((proj (ede-current-project))
+          (targets (get-target-names (oref proj build-tool) (cmake-build-directory proj)))
+          (string (completing-read "Target: " targets nil nil nil 'cmake-target-history)))
+     (list string)))
   (cmake-build (ede-current-project) target))
 
 (defmethod ede-find-target ((proj ede-cmake-cpp-project) buffer)

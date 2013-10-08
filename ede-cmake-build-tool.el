@@ -2,6 +2,8 @@
 
 ;; Author: Alastair Rankine <alastair@girtby.net>
 
+(require 'cmake-target-cache)
+
 (defclass ede-cmake-build-tool ()
   ((generator-string
     :type string
@@ -12,8 +14,10 @@
     :initform ""
     :type string
     :documentation "Additional parameters to build tool")
+   (target-cache
+    :type cmake-target-cache)
    )
-)
+  )
 
 (defclass cmake-makelike-build-tool (ede-cmake-build-tool)
   ;; Base class for tools that work like make 
@@ -35,6 +39,9 @@
     :type string
     :initarg :generator-string
     :initform "Ninja")
+   (target-cache
+    :initform (cmake-ninja-target-cache "target-cache")
+    )
    )
   )
 
@@ -62,6 +69,9 @@
          (cmd (concat "gdb -i=mi " exe)))
     (gdb cmd)))
 
+(defmethod get-target-names ((this cmake-makelike-build-tool) builddir)
+  "Gets a list of possible targets for the build directory"
+  (get-targets (oref this target-cache) builddir))
 
 
 (defmethod invoke-make ((this cmake-make-build-tool) dir targetname)

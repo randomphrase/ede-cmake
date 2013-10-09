@@ -310,11 +310,6 @@ If one doesn't exist, create a new one for this directory."
   "Debug the target"
   (project-debug-target (ede-project-root (ede-target-parent this)) this))
 
-(defun cmake-project-build-custom-target (target)
-  "Prompt for a custom target and build it in the current project"
-  (interactive "MTarget: ")
-  (cmake-build (ede-current-project) target))
-
 (defmethod cmake-build-tool-run-target ((tool ede-cmake-build-tool) target)
   "Run the specified target"
   (error "cmake-build-tool-run-target not supported by %s" (object-name ot)))

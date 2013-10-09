@@ -43,11 +43,11 @@
     ;; Logic stolen from ede/arduino.el
     (when (or (not (oref this target-file-timestamp))
               (/= (or (oref this target-file-size) 0) size)
-              (not (equal (oref target-file-timestamp timestamp) mod)))
+              (not (equal (oref this target-file-timestamp) mod)))
       
       (reload-cache this builddir)
-      ;; (oset this target-file-timestamp mod)
-      ;; (oset this target-file-size size)
+      (oset this target-file-timestamp mod)
+      (oset this target-file-size size)
       )
     ))
          
